@@ -91,6 +91,9 @@ void Menu::MainMenu()
         ImGui::Checkbox("##bounds", &this->bESPBounds);
         GUI::Tooltip("BOUNDS");
         ImGui::SameLine();
+        ImGui::Checkbox("##chams", &this->bESPChams);
+        GUI::Tooltip("CHAMS");
+        ImGui::SameLine();
         ImGui::Checkbox("##box_health", &this->bESPHealth);
         GUI::Tooltip("HEALTH");
 
@@ -246,6 +249,9 @@ void Menu::RenderCache()
 
             if (this->bESPBounds)
                 GUI::DrawPlayerBounds(obj, cache.m_camera, IM_COL32_WHITE);
+
+            if (this->bESPChams)
+                GUI::DrawPlayerBoneBounds( obj, cache.m_camera, IM_COL32(255, 0, 0, 70), 1.5f);
             
             if (this->bESPBones)
                 GUI::DrawPlayerSkeleton(obj, cache.m_camera, IM_COL32_WHITE);
@@ -500,6 +506,89 @@ void GUI::DrawPlayerBounds(const SOCOM::SImGuiPlayer& player, Engine::zdb::Class
                 ImVec2(screen[a].x, screen[a].y) + screen_pos,
                 ImVec2(screen[b].x, screen[b].y) + screen_pos,
                 color
+            );
+        }
+    }
+}
+
+void GUI::DrawPlayerBoneBounds(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color, float size)
+{
+    ImVec2 screen_pos = g_dxWindow->GetCloneWindowPos();
+    ImVec2 screen_size = g_dxWindow->GetCloneWindowSize();
+    Engine::Vec2 szScreen = { screen_size.x , screen_size.y };
+
+    for (int bone = 0; bone < Engine::zdb::Enums::FT_BONE_MAX; bone++)
+    {
+        if (!player.m_bBoneBoundsValid[bone])
+            continue;
+
+        // Only draw bones used by our skeleton chains
+        bool used = false;
+
+        for (int chain = 0; chain < Engine::zdb::BONE_CHAIN_COUNT && !used; chain++)
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                const int idx = Engine::zdb::cs_BoneChains[chain][i];
+
+                if (idx == BONE_INVALID)
+                    break;
+
+                if (idx == bone)
+                {
+                    used = true;
+                    break;
+                }
+            }
+        }
+
+        if (!used)
+            continue;
+
+        bool visible[8]{};
+        Engine::Vec3 center{};
+        Engine::Vec2 screen[8];
+        for (int v = 0; v < 8; v++)
+        {
+            visible[v] = Engine::zdb::Tools::Transform::WorldToScreen( player.m_boneBounds[bone][v], camera, szScreen, &screen[v]);
+
+            /* debug */
+            center += player.m_boneBounds[bone][v];
+        }
+
+        // chams
+        for (int face = 0; face < 6; face++)
+        {
+            int a = Engine::zdb::cs_BoxFaces[face][0];
+            int b = Engine::zdb::cs_BoxFaces[face][1];
+            int c = Engine::zdb::cs_BoxFaces[face][2];
+            int d = Engine::zdb::cs_BoxFaces[face][3];
+
+            if (!visible[a] || !visible[b] || !visible[c] || !visible[d])
+                continue;
+
+            ImGui::GetBackgroundDrawList()->AddQuadFilled(
+                ImVec2(screen[a].x, screen[a].y) + screen_pos,
+                ImVec2(screen[b].x, screen[b].y) + screen_pos,
+                ImVec2(screen[c].x, screen[c].y) + screen_pos,
+                ImVec2(screen[d].x, screen[d].y) + screen_pos,
+                color
+            );
+        }
+
+        // wireframe
+        for (int edge = 0; edge < 12; edge++)
+        {
+            const int a = Engine::zdb::cs_BoxVerts[edge][0];
+            const int b = Engine::zdb::cs_BoxVerts[edge][1];
+
+            if (!visible[a] || !visible[b])
+                continue;
+
+            CleanLine(
+                screen_pos + ImVec2(screen[a].x, screen[a].y),
+                screen_pos + ImVec2(screen[b].x, screen[b].y),
+                ImColor(1.0f, 1.0f, 1.0f, color.Value.w)
             );
         }
     }

@@ -144,7 +144,7 @@ namespace Engine
 				FT_BONE_leyeball,
 				FT_BONE_reyelid,
 				FT_BONE_leyelid,
-				FT_BONE_MAX = FT_BONE_leyelid
+				FT_BONE_MAX
 			};
 		}
 
@@ -559,6 +559,20 @@ namespace Engine
 				bool GetBoneModelPosition(const Classes::CZBodyPart& bone, Vec3* out);
 				bool GetBoneWorldPosition(const Classes::CZSealBody& seal, const Classes::CZBodyPart& bone, Vec3* out);
 				bool GetBoneWorldPositionByIndex(const Classes::CZSealBody& seal, const Enums::FT_BONE& bone, Vec3* out);
+				bool GetBoneWorldBounds(const Classes::CZSealBody& seal, const Classes::CZBodyPart& bone, Vec3 out[8]);
+			}
+
+			namespace Render
+			{
+				struct SBoneRenderData
+				{
+					Vec3 position{};
+					bool positionValid{ false };
+
+					Vec3 bounds[8]{};
+					bool boundsValid{ false };
+				};
+				bool GetBoneRenderData(const Classes::CZSealBody& seal, const Enums::FT_BONE& bone, SBoneRenderData* out);
 			}
 			
 			namespace Weapon
@@ -626,11 +640,21 @@ namespace Engine
 		};
 		static constexpr size_t BONE_CHAIN_COUNT(sizeof(cs_BoneChains) / sizeof(cs_BoneChains[0]));
 
-		static const i32_t cs_BoxVerts[12][2] =
+		static constexpr i32_t cs_BoxVerts[12][2] =
 		{
 			{ 0,1 },{ 1,2 },{ 2,3 },{ 3,0 },
 			{ 4,5 },{ 5,6 },{ 6,7 },{ 7,4 },
 			{ 0,4 },{ 1,5 },{ 2,6 },{ 3,7 }
+		};
+
+		static constexpr i32_t cs_BoxFaces[6][4] =
+		{
+			{ 0, 1, 2, 3 }, // front
+			{ 4, 5, 6, 7 }, // back
+			{ 0, 1, 5, 4 }, // bottom
+			{ 3, 2, 6, 7 }, // top
+			{ 0, 3, 7, 4 }, // left
+			{ 1, 2, 6, 5 }  // right
 		};
 	}
 }
@@ -652,6 +676,8 @@ public:
 		bool m_boundsValid[8]{ false };
 		Engine::Vec3 m_bones[Engine::zdb::Enums::FT_BONE_MAX];
 		bool m_bBoneValid[Engine::zdb::Enums::FT_BONE_MAX]{ false };
+		Engine::Vec3 m_boneBounds[Engine::zdb::Enums::FT_BONE_MAX][8];
+		bool m_bBoneBoundsValid[Engine::zdb::Enums::FT_BONE_MAX]{ false };
 	};
 
 	struct SImGuiPickup

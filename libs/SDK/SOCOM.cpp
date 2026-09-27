@@ -209,6 +209,70 @@ namespace Engine
 				return true;
 			}
 
+			bool Entity::GetBoneWorldBounds(const Classes::CZSealBody& seal, const Classes::CZBodyPart& bone, Vec3 out[8])
+			{
+				if (!out || bone.p_node == 0)
+					return false;
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				auto boneNode = g_Memory.Read<Classes::CNode>(eemem + bone.p_node);
+
+				boneNode.m_bounds.GetBoxVerts(out);
+
+				for (int i = 0; i < 8; i++)
+				{
+					out[i] = QuaternionRotate(bone.m_quat, out[i]);
+					out[i] += bone.m_translation;
+				}
+
+				auto current = bone;
+
+				int depth = 0;
+
+				while (current.p_parent != 0 && depth < 33)
+				{
+					auto parent = g_Memory.Read<Classes::CZBodyPart>(eemem + current.p_parent);
+
+					for (int i = 0; i < 8; i++)
+					{
+						out[i] = QuaternionRotate(parent.m_quat, out[i]);
+						out[i] += parent.m_translation;
+					}
+
+					current = parent;
+					depth++;
+				}
+
+				if (seal.p_node != 0)
+				{
+					auto sealNode = g_Memory.Read<Classes::CNode>(eemem + seal.p_node);
+
+					for (int i = 0; i < 8; i++)
+						out[i] = sealNode.m_mtxModel.TransformPoint3(out[i]);
+				}
+
+				return true;
+			}
+
+			bool Render::GetBoneRenderData(const Classes::CZSealBody& seal, const Enums::FT_BONE& idx, SBoneRenderData* out)
+			{
+				if (!out || seal.a_skeleton[idx] == 0)
+					return false;
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				const auto bone = g_Memory.Read<Classes::CZBodyPart>(eemem + seal.a_skeleton[idx]);
+				out->positionValid = Entity::GetBoneWorldPositionByIndex(seal, idx, &out->position);
+				out->boundsValid = Entity::GetBoneWorldBounds(seal, bone, out->bounds);
+
+				return out->positionValid || out->boundsValid;
+			}
+
 			/* */
 			bool Weapon::GetWeapon(const int& weaponIndex, Classes::CZWeapon& weapon, i64_t* pWeaponAddr)
 			{
@@ -769,11 +833,26 @@ void SOCOM::Update()
 			/* bones */
 			for (int i = 0; i < Engine::zdb::Enums::FT_BONE_MAX; i++)
 			{
+				Engine::zdb::Tools::Render::SBoneRenderData data{};
 				Engine::Vec3 bonePos;
-				if (Tools::Entity::GetBoneWorldPositionByIndex(ent, (Engine::zdb::Enums::FT_BONE)i, &bonePos))
+
+				if (!Engine::zdb::Tools::Render::GetBoneRenderData(ent, (Engine::zdb::Enums::FT_BONE)i, &data))
+					continue;
+
+
+				if (data.positionValid)
 				{
-					imPlayer.m_bones[i] = bonePos;
+					imPlayer.m_bones[i] = data.position;
 					imPlayer.m_bBoneValid[i] = true;
+				}
+
+
+				if (data.boundsValid)
+				{
+					for (int v = 0; v < 8; v++)
+						imPlayer.m_boneBounds[i][v] = data.bounds[v];
+
+					imPlayer.m_bBoneBoundsValid[i] = true;
 				}
 			}
 

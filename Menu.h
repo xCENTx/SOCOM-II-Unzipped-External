@@ -21,6 +21,7 @@ public:	//	visual controls
 	bool bESPBox2D{ false };
 	bool bESPBones{ false };
 	bool bESPBounds{ false };
+	bool bESPChams{ false };
 	float mESPDist{ 100.f };
 
 private:
@@ -84,4 +85,5 @@ public:	//	canvas
 public: //	socom 
 	static void DrawPlayerSkeleton(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color);
 	static void DrawPlayerBounds(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color);
+	static void DrawPlayerBoneBounds(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color, float size);
 };
