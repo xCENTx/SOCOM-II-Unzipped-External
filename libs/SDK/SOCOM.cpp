@@ -128,6 +128,88 @@ namespace Engine
 			}
 
 			/* */
+			bool Entity::GetBoneModelPosition(const Classes::CZBodyPart& bone, Vec3* out)
+			{
+				if (!out)
+					return false;
+
+				Vec3 position = bone.m_translation;
+				
+				if (bone.p_parent == 0)
+				{
+					*out = position;
+					return true;
+				}
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				auto parent = g_Memory.Read<Classes::CZBodyPart>(eemem + bone.p_parent);
+				
+				int depth = 0;
+				while (depth < 33)
+				{
+					position = QuaternionRotate(parent.m_quat, position);
+					position += parent.m_translation;
+					if (parent.p_parent == 0)
+						break;
+
+					parent = g_Memory.Read<Classes::CZBodyPart>(eemem + parent.p_parent);
+
+					depth++;
+				}
+				
+				*out = position;
+
+				return true;
+			}
+
+			/* */
+			bool Entity::GetBoneWorldPosition(const Classes::CZSealBody& seal, const Classes::CZBodyPart& bone, Vec3* out)
+			{
+				if (!out)
+					return false;
+				
+				Vec3 modelPosition;
+				if (!GetBoneModelPosition(bone, &modelPosition))
+					return false;
+
+				if (seal.p_node == 0)
+				{
+					*out = modelPosition;
+					return true;
+				}
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				auto node = g_Memory.Read<Classes::CNode>(eemem + seal.p_node);
+				
+				*out = node.m_mtxModel.TransformPoint3(modelPosition);
+				
+				return true;
+			}
+			
+			/* */
+			bool Entity::GetBoneWorldPositionByIndex(const Classes::CZSealBody& seal, const Enums::FT_BONE& idx, Vec3* out)
+			{
+				if (!out || seal.a_skeleton[idx] == 0)
+					return false;
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				auto bone = g_Memory.Read<Classes::CZBodyPart>(eemem + seal.a_skeleton[idx]);
+				if (!GetBoneWorldPosition(seal, bone, out))
+					return false;
+
+				return true;
+			}
+
+			/* */
 			bool Weapon::GetWeapon(const int& weaponIndex, Classes::CZWeapon& weapon, i64_t* pWeaponAddr)
 			{
 				__int64 eemem = g_Memory.GetEEMemory();
@@ -668,6 +750,32 @@ void SOCOM::Update()
 
 			if (!g_Memory.ReadString(globals.m_EE + ent.p_name, imPlayer.m_name, PLAYNAME_MAXLEN))
 				continue;
+
+			/* get bounding box */
+			if (ent.p_node != 0)
+			{
+				auto node = g_Memory.Read<Classes::CNode>(globals.m_EE + ent.p_node);
+
+				Engine::Vec3 bounds[8];
+				node.m_bounds.GetRotatedBoxVerts(node.m_mtxModel, bounds);
+				
+				for (int i = 0; i < 8; i++)
+				{
+					imPlayer.m_bounds[i] = bounds[i];
+					imPlayer.m_boundsValid[i] = true;
+				}
+			}
+
+			/* bones */
+			for (int i = 0; i < Engine::zdb::Enums::FT_BONE_MAX; i++)
+			{
+				Engine::Vec3 bonePos;
+				if (Tools::Entity::GetBoneWorldPositionByIndex(ent, (Engine::zdb::Enums::FT_BONE)i, &bonePos))
+				{
+					imPlayer.m_bones[i] = bonePos;
+					imPlayer.m_bBoneValid[i] = true;
+				}
+			}
 
 			imPlayer.m_pos = ent.m_wsOrigin;
 			imPlayer.m_health = ent.m_health * 100.f;

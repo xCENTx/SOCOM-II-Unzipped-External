@@ -19,13 +19,9 @@ public:	//	visual controls
 	bool bESPSnap{ false };
 	bool bESPHealth{ false };
 	bool bESPBox2D{ false };
+	bool bESPBones{ false };
+	bool bESPBounds{ false };
 	float mESPDist{ 100.f };
-
-public: // patch controls
-	int mFPS{ 30 };
-
-public: // debug
-	std::atomic < float > m_refreshTimes[4]; // PCSX2 - SOCOM - WINDOW - TOTAL
 
 private:
 
@@ -84,4 +80,8 @@ public:	//	canvas
 	static void Circle(const ImVec2& pos, const ImColor& color, const float& radius, const float& thickness = 1.0f, const float& segments = 64);
 	static void CleanLine(const ImVec2& posA, const ImVec2& posB, const ImColor& color, const float& thickness = 1.0f);
 	static void CleanCircle(const ImVec2& pos, const ImColor& color, const float& radius, const float& thickness = 1.0f, const float& segments = 64);
+
+public: //	socom 
+	static void DrawPlayerSkeleton(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color);
+	static void DrawPlayerBounds(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color);
 };

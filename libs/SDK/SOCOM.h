@@ -6,6 +6,8 @@
 #include <type_traits>
 
 using u32_t = uint32_t;
+using i32_t = int32_t;
+
 constexpr i64_t RuntimeForCrashRva = 0x0D7FAD18; // 
 #define PLAYNAME_MAXLEN 32
 
@@ -51,47 +53,98 @@ namespace Engine
 
 		namespace Enums
 		{
-			enum EZoomState : char
+			enum ZOOM_STATE : char
 			{
-				EZoomState_default = 0,
-				EZoomState_1stperson = 1,
-				EZoomState_unknown = 2,
-				EZoomState_binocs = 3,
-				EZoomState_weapondef_1 = 4
+				ZOOM_STATE_DEFAULT = 0,
+				ZOOM_STATE_1STPERSON,
+				ZOOM_STATE_UNKNOWN,
+				ZOOM_STATE_BINOCS,
+				ZOOM_STATE_WEAPONDEF_1
 			};
 
-			enum class ESealTeam : u32_t
+			enum class SEAL_TEAMS : u32_t
 			{
-				ETeam_SEALS		= 0x40000001,		//	Seal
-				ETeam_TERRORIST = 0x80000100,		//	Terrorist
-				ETeam_TURRET	= 0x48000000,		//	Turret
-				ETeam_SPECTATOR = 0x00010000,		//	Spectator
-				ETeam_SP_ABLE	= 0x84000006,		//	Alpha Team
-				ETeam_SP_BRAVO	= 0x8400000A,		//	Bravo Team
+				TEAM_SEALS		= 0x40000001,		//	Seal
+				TEAM_TERRORIST	= 0x80000100,		//	Terrorist
+				TEAM_TURRET		= 0x48000000,		//	Turret
+				TEAM_SPECTATOR	= 0x00010000,		//	Spectator
+				TEAM_SP_ABLE	= 0x84000006,		//	Alpha Team
+				TEAM_SP_BRAVO	= 0x8400000A,		//	Bravo Team
 			};
 
-			enum ESealStance : char
+			enum SEAL_STANCE : char
 			{
-				ESealStance_Stand = 0,
-				ESealStance_Crouch = 1,
-				ESealStance_Prone = 2
+				ESTANCE_STAND = 0,
+				ESTANCE_CROUCH,
+				ESTANCE_PRONE
 			};
 
-			enum EWeaponIndex : __int32
+			enum WP_INDEX : i32_t
 			{
-				EWeaponIndex_Primary = 0,
-				EWeaponIndex_Secondary = 1,
-				EWeaponIndex_EqSlot1 = 2,
-				EWeaponIndex_EqSlot2 = 3,
-				EWeaponIndex_EqSlot3 = 4
+				WEAPON_PRIMARY = 0,
+				WEAPON_SECONDARY = 1,
+				WEAPON_EQSLOT1 = 2,
+				WEAPON_EQSLOT2 = 3,
+				WEAPON_EQSLOT3 = 4
 			};
 
-			enum EWeaponFireMode : __int32
+			enum WP_FIREMODE : i32_t
 			{
-				EFireMode_Default = 0,
-				EFireMode_Single = 1,
-				EFireMode_Burst = 2,
-				EFireMode_Auto = 3
+				FIREMODE_SAFETY = 0,
+				FIREMODE_SINGLE,
+				FIREMODE_BURST,
+				FIREMODE_AUTOFIRE,
+				FIREMODE_SPECIAL_MODE,
+				FIREMODE_NUM_FIREMODES
+			};
+
+			enum WP_ENCUMBRANCE : int8_t
+			{
+				ENCUMBRANCE_LIGHT,
+				ENCUMBRANCE_MEDIUM,
+				ENCUMBRANCE_HEAVY,
+				ENCUMBRANCE_VERY_HEAVY,
+				ENCUMBRANCE_NOT_ENCUMBERED,
+				ENCUMBRANCE_NUM_ECUMBTYPES
+			};
+
+			enum FT_BONE : __int8
+			{
+				FT_BONE_MIN = 0,
+				FT_BONE_root = FT_BONE_MIN,
+				FT_BONE_aimnodes,
+				FT_BONE_lfoot,			//	left heel
+				FT_BONE_rfoot,			//	right heel
+				FT_BONE_lhand,			//	left hand
+				FT_BONE_spinelo,		//	lower spine
+				FT_BONE_rhand,			//	right hand
+				FT_BONE_hips,
+				FT_BONE_head,			//	center head
+				FT_BONE_neck,			//	neck
+				FT_BONE_spinehi,		//	upper spine
+				FT_BONE_lthigh,			//	left hip
+				FT_BONE_rthigh,			//	right hip
+				FT_BONE_rcalf,			//	right knee
+				FT_BONE_rbicep,			//	right shoulder
+				FT_BONE_rforearm,		//	right elbow
+				FT_BONE_lbicep,			//	left shoulder
+				FT_BONE_lforearm,		//	left elbow
+				FT_BONE_lscap,
+				FT_BONE_rscap,
+				FT_BONE_lshoulder_wgt,	//	left shoulder
+				FT_BONE_rshoulder_wgt,	//	right shoulder
+				FT_BONE_lcalf,			//	knee
+				FT_BONE_ltoe,			//	foot	
+				FT_BONE_rtoe,			//	foot
+				FT_BONE_weapon,
+				FT_BONE_rifle,
+				FT_BONE_pistol,
+				FT_BONE_grenade,
+				FT_BONE_reyeball,
+				FT_BONE_leyeball,
+				FT_BONE_reyelid,
+				FT_BONE_leyelid,
+				FT_BONE_MAX = FT_BONE_leyelid
 			};
 		}
 
@@ -338,12 +391,12 @@ namespace Engine
 				int32_t m_PrimaryMagIndex; //0x067C
 				int32_t m_SecondaryMagIndex; //0x0680
 				char pad_0684[112]; //0x0684
-				int32_t m_WeaponFireTypes[2]; //0x06F4
+				WP_FIREMODE m_WeaponFireMode[2]; //0x06F4
 				char pad_06FC[276]; //0x06FC
 				int32_t m_WeaponFireCount; //0x0810
 				float m_WeaponFireDelta; //0x0814
 				char pad_0818[4]; //0x0818
-				int32_t m_CurrentWeaponIndex; //0x081C
+				WP_INDEX m_CurrentWeaponIndex; //0x081C
 				char pad_0820[4]; //0x0820
 				int32_t m_MaxWeaponIndex; //0x0824
 				u32_t p_SealBody; //0x0828 : CZSealBody*
@@ -373,7 +426,7 @@ namespace Engine
 				char pad_0208[224]; //0x0208
 				u32_t a_skeleton[32]; //0x02E8 : CZBodyPart*
 				char pad_0368[12]; //0x0368
-				ESealStance m_stance; //0x0374
+				SEAL_STANCE m_stance; //0x0374
 				char pad_0375[3]; //0x0375
 				float m_ShoulderRecoil; //0x0378
 				char pad_037C[68]; //0x037C
@@ -428,7 +481,7 @@ namespace Engine
 				int32_t m_defaultMags; //0x002C
 				float m_SoundRadius; //0x0030
 				float m_SoundRadiusSq; //0x0034
-				int8_t m_encumberance; //0x0038
+				WP_ENCUMBRANCE m_encumberance; //0x0038
 				char pad_0039[3]; //0x0039
 				float m_MaxRange; //0x003C
 				float m_EffectiveRange; //0x0040
@@ -502,6 +555,10 @@ namespace Engine
 			{
 				bool GetLocalSeal(Classes::CZSealBody& pSeal, i64_t* pAddr);
 				bool GetPlayers(std::vector<Classes::CZSealBody>* players);
+				bool GetPlayerBounds(const Classes::CZSealBody& seal, AABB* out);
+				bool GetBoneModelPosition(const Classes::CZBodyPart& bone, Vec3* out);
+				bool GetBoneWorldPosition(const Classes::CZSealBody& seal, const Classes::CZBodyPart& bone, Vec3* out);
+				bool GetBoneWorldPositionByIndex(const Classes::CZSealBody& seal, const Enums::FT_BONE& bone, Vec3* out);
 			}
 			
 			namespace Weapon
@@ -511,6 +568,70 @@ namespace Engine
 				std::string GetAmmoName(u32_t weapon);
 			}
 		}
+	
+
+
+		// ------------------------------------------------------------
+		// statics
+		// ------------------------------------------------------------
+		#define BONE_INVALID (-1)
+		static const i32_t cs_BoneChains[][6] =
+		{
+			// Left arm -> neck
+			{
+				Enums::FT_BONE_lhand,
+				Enums::FT_BONE_lforearm,
+				Enums::FT_BONE_lbicep,
+				Enums::FT_BONE_neck,
+				BONE_INVALID
+			},
+
+			// Right arm -> neck
+			{
+				Enums::FT_BONE_rhand,
+				Enums::FT_BONE_rforearm,
+				Enums::FT_BONE_rbicep,
+				Enums::FT_BONE_neck,
+				BONE_INVALID
+			},
+
+			// Left leg -> lower spine
+			{
+				Enums::FT_BONE_ltoe,
+				Enums::FT_BONE_lfoot,
+				Enums::FT_BONE_lcalf,
+				Enums::FT_BONE_lthigh,
+				Enums::FT_BONE_spinelo,
+				BONE_INVALID
+			},
+
+			// Right leg -> lower spine
+			{
+				Enums::FT_BONE_rtoe,
+				Enums::FT_BONE_rfoot,
+				Enums::FT_BONE_rcalf,
+				Enums::FT_BONE_rthigh,
+				Enums::FT_BONE_spinelo,
+				BONE_INVALID
+			},
+
+			// Spine -> head
+			{
+				Enums::FT_BONE_spinelo,
+				Enums::FT_BONE_spinehi,
+				Enums::FT_BONE_neck,
+				Enums::FT_BONE_head,
+				BONE_INVALID
+			}
+		};
+		static constexpr size_t BONE_CHAIN_COUNT(sizeof(cs_BoneChains) / sizeof(cs_BoneChains[0]));
+
+		static const i32_t cs_BoxVerts[12][2] =
+		{
+			{ 0,1 },{ 1,2 },{ 2,3 },{ 3,0 },
+			{ 4,5 },{ 5,6 },{ 6,7 },{ 7,4 },
+			{ 0,4 },{ 1,5 },{ 2,6 },{ 3,7 }
+		};
 	}
 }
 
@@ -524,8 +645,13 @@ public:
 		bool m_bAlive{ false };
 		float m_health{ 0.0f };
 		Engine::Vec3 m_pos{ 0.0f, 0.0f, 0.0f };
-		Engine::zdb::Enums::ESealStance m_stance{ Engine::zdb::Enums::ESealStance::ESealStance_Stand };
+		Engine::zdb::Enums::SEAL_STANCE m_stance{ Engine::zdb::Enums::SEAL_STANCE::ESTANCE_STAND };
 		Engine::zdb::Classes::CZSealBody m_class;
+
+		Engine::Vec3 m_bounds[8];
+		bool m_boundsValid[8]{ false };
+		Engine::Vec3 m_bones[Engine::zdb::Enums::FT_BONE_MAX];
+		bool m_bBoneValid[Engine::zdb::Enums::FT_BONE_MAX]{ false };
 	};
 
 	struct SImGuiPickup

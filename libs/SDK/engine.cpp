@@ -275,6 +275,8 @@ namespace Engine
 		);
 	}
 
+	Vec3 Matrix4x4::TransformPoint3(const Vec3& v) const { Vec4 result = TransformPoint({ v.x, v.y, v.z, 1.f }); return { result.x, result.y, result.z }; }
+
 	Vec4 Matrix4x4::TransformPoint(const Vec3& v) const { return TransformPoint({ v.x, v.y, v.z, 1.f }); }
 
 	Vec4 Matrix4x4::TransformPoint(const Vec4& v) const 
@@ -301,5 +303,25 @@ namespace Engine
 			v.z * m[2][3] +
 			v.w * m[3][3]
 		};
+	}
+
+	void AABB::GetBoxVerts(Vec3 out[8])
+	{
+		out[0] = { min.x, min.y, min.z };
+		out[1] = { max.x, min.y, min.z };
+		out[2] = { max.x, max.y, min.z };
+		out[3] = { min.x, max.y, min.z };
+
+		out[4] = { min.x, min.y, max.z };
+		out[5] = { max.x, min.y, max.z };
+		out[6] = { max.x, max.y, max.z };
+		out[7] = { min.x, max.y, max.z };
+	}
+
+	void AABB::GetRotatedBoxVerts(const Matrix4x4& mtx, Vec3 out[8])
+	{
+		GetBoxVerts(out);
+		for (int i = 0; i < 8; i++)
+			out[i] = mtx.TransformPoint3(out[i]);
 	}
 }
