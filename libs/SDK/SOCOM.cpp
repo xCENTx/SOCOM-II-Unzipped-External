@@ -15,9 +15,18 @@ namespace Engine
 			/* */
 			bool Camera::GetCamera(Classes::CZCamera& camera)
 			{
-                uint32_t address{};
-                return g_Memory.ReadGuest(Offsets::gCamera, address) && address &&
-                    g_Memory.ReadGuest(address, camera);
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				auto pCamera = g_Memory.Read<__int32>(eemem + Offsets::gCamera);
+				if (!pCamera || pCamera == Offsets::gCamera)
+					return false;
+
+				camera = g_Memory.Read<Classes::CZCamera>(eemem + pCamera);
+
+				return true;
 			}
 
 			/* */
@@ -60,81 +69,125 @@ namespace Engine
 			/* */
 			bool Entity::GetLocalSeal(Classes::CZSealBody& seal, i64_t* pSealAddr)
 			{
-                if (pSealAddr) *pSealAddr = 0;
-                uint32_t address{};
-                if (!g_Memory.ReadGuest(Offsets::gLocalSeal, address) || !address ||
-                    !g_Memory.ReadGuest(address, seal)) return false;
-                // Preserve the existing output contract: a remote host address.
-                if (pSealAddr) *pSealAddr = g_Memory.GuestToHost(address);
-                return true;
+				//	get eemem
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				//	pointer to local seal
+				auto pSeal = g_Memory.Read<__int32>(eemem + Offsets::gLocalSeal);
+				if (!pSeal)
+					return false;
+
+				//	result
+				seal = g_Memory.Read<Classes::CZSealBody>(eemem + pSeal);
+				*pSealAddr = eemem + pSeal;
+
+				return true;
 			}
 
 			/* */
 			bool Entity::GetPlayers(std::vector<Classes::CZSealBody>*players)
 			{
-                if (!players) return false;
-                players->clear();
-                Structs::ZArray list{};
-                if (!g_Memory.ReadGuest(Offsets::gEntityArray, list) ||
-                    !list.count || list.count > 2048 || !list.begin || !list.end) return false;
-                Structs::ZIterator first{};
-                if (!g_Memory.ReadGuest(list.begin, first) || !first.prev) return false;
-                // Preserve the existing begin.prev sentinel convention, but compare node
-                // addresses and bound traversal rather than comparing data pointers.
-                const uint32_t sentinel = first.prev & SOCOMMemory::RamMask;
-                uint32_t node = list.begin;
-                std::unordered_set<uint32_t> visited;
-                std::vector<Classes::CZSealBody> result;
-                for (uint32_t i = 0; i <= list.count; ++i)
-                {
-                    if (i && (node & SOCOMMemory::RamMask) == sentinel)
-                    { *players = std::move(result); return !players->empty(); }
-                    if (!node || i == list.count ||
-                        !visited.insert(node & SOCOMMemory::RamMask).second) return false;
-                    Structs::ZIterator it{};
-                    if (!g_Memory.ReadGuest(node, it)) return false;
-                    if (it.data)
-                    {
-                        Classes::CZSealBody seal{};
-                        if (!g_Memory.ReadGuest(it.data, seal)) return false;
-                        if (seal.p_name) result.push_back(seal);
-                    }
-                    node = it.next;
-                }
-                return false;
+
+				std::vector<Classes::CZSealBody> seals;
+
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				auto sealArray = g_Memory.Read<Structs::ZArray>(eemem + Offsets::gEntityArray);
+				if (sealArray.count <= 1 || sealArray.begin <= 0 || sealArray.end <= 0)
+					return false;
+
+
+				auto it = g_Memory.Read<Structs::ZIterator>(eemem + sealArray.begin);
+				auto end = g_Memory.Read<Structs::ZIterator>(eemem + it.prev);
+				do
+				{
+					auto data = it.data;
+					if (data > 0)
+					{
+						auto seal = g_Memory.Read<Classes::CZSealBody>(eemem + data);
+						if (seal.p_name)
+							seals.push_back(seal);
+					}
+
+					it = g_Memory.Read<Structs::ZIterator>(eemem + it.next);
+
+				} while (it.data != end.data);
+
+				*players = seals;
+
+				return players->size() > 0;
 			}
 
 			/* */
 			bool Weapon::GetWeapon(const int& weaponIndex, Classes::CZWeapon& weapon, i64_t* pWeaponAddr)
 			{
-                if (pWeaponAddr) *pWeaponAddr = 0;
-                Classes::CZSealBody seal{};
-                if (!Entity::GetLocalSeal(seal, nullptr) || weaponIndex < 0 ||
-                    weaponIndex >= 10 || weaponIndex >= seal.m_kit.m_MaxWeaponIndex) return false;
-                const uint32_t address = seal.m_kit.p_weapons[weaponIndex];
-                if (!address || !g_Memory.ReadGuest(address, weapon)) return false;
-                if (pWeaponAddr) *pWeaponAddr = g_Memory.GuestToHost(address);
-                return true;
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return false;
+
+				i64_t sealAddr = 0;
+				Classes::CZSealBody czSeal;
+				if (!Tools::Entity::GetLocalSeal(czSeal, &sealAddr) || !sealAddr)
+					return false;
+
+				const auto szWeaponArray = czSeal.m_kit.m_MaxWeaponIndex;
+				if (weaponIndex >= szWeaponArray)
+					return false;
+
+				const auto& pBaseWeapon = sealAddr + (offsetof(Classes::CZSealBody, m_kit) + offsetof(Classes::CZKit, p_weapons[0]));
+				if (pBaseWeapon <= sealAddr)
+					return false;
+
+				const auto& pWeapon = pBaseWeapon + (weaponIndex * 0x4);
+				if (!pWeapon)
+					return false;
+
+				weapon = g_Memory.Read<Classes::CZWeapon>(eemem + pWeapon);
+				*pWeaponAddr = eemem + pWeapon;
+
+				return true;
 			}
 
 			/* */
 			std::string Weapon::GetWeaponName(u32_t weapon)
 			{
-                std::string result;
-                Classes::CZWeapon value{};
-                if (weapon && g_Memory.ReadGuest(weapon, value))
-                    g_Memory.ReadGuestString(value.p_Name, result);
-                return result;
+				std::string result = "";
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return result;
+
+				const auto& addr = eemem + weapon;
+				if (addr <= weapon)
+					return result;
+
+				const auto& czWeapon = g_Memory.Read<Classes::CZWeapon>(addr);
+
+				g_Memory.ReadString(eemem + czWeapon.p_name, result);
+
+				return result;
 			}
 
 			/* */
 			std::string Weapon::GetAmmoName(u32_t ammo)
 			{
-                std::string result;
-                Classes::CZAmmo value{};
-                if (ammo && g_Memory.ReadGuest(ammo, value))
-                    g_Memory.ReadGuestString(value.p_name, result);
-                return result;
+				std::string result = "";
+				__int64 eemem = g_Memory.GetEEMemory();
+				if (!eemem)
+					return result;
+
+				const auto& addr = eemem + (u32_t)ammo;
+				if (addr <= (u32_t)ammo)
+					return result;
+
+				const auto& czAmmo = g_Memory.Read<Classes::CZAmmo>(addr);
+
+				g_Memory.ReadString(eemem + czAmmo.p_name, result);
+
+				return result;
 			}
 
 			Matrix4x4 Transform::BuildViewToClip(const zdb::Classes::CZCamera& camera)
@@ -436,43 +489,6 @@ namespace Engine
 	}
 }
 
-// Native SOCOM II runtime memory discovery.
-namespace
-{
-    // Verified for the September 26, 2026 socom2.exe build. This is an RVA,
-    // not an absolute address; update it when the native executable changes.
-    constexpr uintptr_t RuntimeForCrashRva = 0x0D7FAD18;
-
-    bool Readable(const MEMORY_BASIC_INFORMATION& info)
-    {
-        if (info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
-        const DWORD p = info.Protect & 0xFF;
-        return p == PAGE_READONLY || p == PAGE_READWRITE || p == PAGE_WRITECOPY ||
-            p == PAGE_EXECUTE_READ || p == PAGE_EXECUTE_READWRITE || p == PAGE_EXECUTE_WRITECOPY;
-    }
-
-    bool RamRange(HANDLE process, uintptr_t base)
-    {
-        if (!base || base > UINTPTR_MAX - SOCOMMemory::RamSize) return false;
-        const uintptr_t end = base + SOCOMMemory::RamSize;
-        uintptr_t allocation = 0;
-        for (uintptr_t p = base; p < end;)
-        {
-            MEMORY_BASIC_INFORMATION info{};
-            if (!VirtualQueryEx(process, reinterpret_cast<void*>(p), &info, sizeof(info)) ||
-                !Readable(info) || info.Type != MEM_PRIVATE) return false;
-            if (!allocation) allocation = reinterpret_cast<uintptr_t>(info.AllocationBase);
-            if (allocation != reinterpret_cast<uintptr_t>(info.AllocationBase)) return false;
-            const DWORD protection = info.Protect & 0xFF;
-            if (protection != PAGE_READWRITE && protection != PAGE_EXECUTE_READWRITE) return false;
-            const uintptr_t next = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
-            if (next <= p) return false;
-            p = next;
-        }
-        return true;
-    }
-}
-
 SOCOMMemory::SOCOMMemory(const std::string& name) : SOCOMMemory(name, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) {}
 
 SOCOMMemory::SOCOMMemory(const std::string& name, const DWORD& access) : exMemory(), targetName(name), targetAccess(access)
@@ -515,42 +531,33 @@ bool SOCOMMemory::Detach()
 
 bool SOCOMMemory::ResolveRdram()
 {
-    const uintptr_t previousBase = SocomInfo.dwEEBase;
-    SocomInfo.dwEEBase = 0;
-    if (!bAttached || sizeof(uintptr_t) != sizeof(uint64_t)) return false;
+	i64_t rdram = 0;
+	i64_t runtime = 0;
+    const i64_t prev = SocomInfo.dwEEBase;
+	const i64_t slot = vmProcess.dwModuleBase + RuntimeForCrashRva;
+    if (!bAttached) 
+		return false;
 
-    const uintptr_t module = static_cast<uintptr_t>(vmProcess.dwModuleBase);
-    if (!module || module > UINTPTR_MAX - RuntimeForCrashRva - sizeof(uint64_t)) return false;
-    const uintptr_t slot = module + RuntimeForCrashRva;
+	if (!ReadMemoryEx(vmProcess.hProc, slot, &runtime, sizeof(runtime)) || !runtime)
+		return false;
 
-    // g_runtimeForCrash -> PS2Runtime::m_memory (offset 0) -> m_rdram (offset 0).
-    // Host pointers are QWORDs even though guest pointers remain 32-bit.
-    uint64_t runtime = 0;
-    uint64_t rdram = 0;
-    if (!ReadMemoryEx(vmProcess.hProc, slot, &runtime, sizeof(runtime)) ||
-        !runtime || runtime > UINTPTR_MAX - sizeof(uint64_t) ||
-        !ReadMemoryEx(vmProcess.hProc, static_cast<uintptr_t>(runtime), &rdram, sizeof(rdram)) ||
-        !rdram || rdram > UINTPTR_MAX - RamSize ||
-        !RamRange(vmProcess.hProc, static_cast<uintptr_t>(rdram))) return false;
+	if (!ReadMemoryEx(vmProcess.hProc, runtime, &rdram, sizeof(rdram)) || !rdram)
+		return false;
 
-    // Do not publish a chain that changed while the allocation was validated.
-    uint64_t currentRuntime = 0;
-    uint64_t currentRdram = 0;
-    if (!ReadMemoryEx(vmProcess.hProc, slot, &currentRuntime, sizeof(currentRuntime)) ||
-        currentRuntime != runtime ||
-        !ReadMemoryEx(vmProcess.hProc, static_cast<uintptr_t>(runtime), &currentRdram, sizeof(currentRdram)) ||
-        currentRdram != rdram) return false;
+	if (prev == rdram)
+		return false;
 
-    SocomInfo.dwEEBase = static_cast<uintptr_t>(rdram);
-    if (SocomInfo.dwEEBase != previousBase)
-        printf("[memory] Runtime: 0x%llX; EE base: 0x%llX\n",
-            static_cast<unsigned long long>(runtime),
-            static_cast<unsigned long long>(rdram));
+    SocomInfo.dwEEBase = rdram;
+
+	printf("[SOCOMMemory] Runtime: EE base: 0x%llX\n", rdram);
+
     return true;
 }
 
 void SOCOMMemory::update()
 {
+	/* @TODO: maybe set a flag when a read fails , then perform an update. works for now */
+
     const auto now = GetTickCount64();
     
 	if (lastRefresh && now - lastRefresh < 1000) 
@@ -559,21 +566,27 @@ void SOCOMMemory::update()
 	lastRefresh = now;
     
 	if (bAttached)
-    {
-        DWORD code = 0;
-        if (!GetExitCodeProcess(vmProcess.hProc, &code) || code != STILL_ACTIVE) 
+	{
+		DWORD code = 0;
+		if (!GetExitCodeProcess(vmProcess.hProc, &code) || code != STILL_ACTIVE)
+		{
 			Detach();
-    }
+			return;
+		}
+	}
     
 	if (!bAttached)
     {
         Attach(targetName, targetAccess);
         return;
     }
-    
-    // Follow the live chain every refresh, including while waiting for startup.
+
+	/* always resolve RDRAM */
+
     ResolveRdram();
     
+	/* this is done in DXWindow every frame as well */
+
 	EnumWindowData data{};
 	data.procId = vmProcess.dwPID;
 	EnumWindows(GetProcWindowEx, reinterpret_cast<LPARAM>(&data));
@@ -583,30 +596,6 @@ void SOCOMMemory::update()
 	char title[MAX_PATH]{};
     if (data.hwnd && GetWindowTextA(data.hwnd, title, MAX_PATH)) 
 		SocomInfo.mWndwTitle = title;
-}
-
-bool SOCOMMemory::ReadGuestBytes(uint32_t guest, void* output, size_t size)
-{
-    const uint32_t offset = guest & RamMask;
-    if (!IsReady() || !output || size > RamSize - offset) return false;
-    return ReadMemoryEx(vmProcess.hProc, GuestToHost(guest), output, size);
-}
-
-bool SOCOMMemory::ReadGuestString(uint32_t guest, std::string& output, size_t maxLength)
-{
-    output.clear();
-    if (!guest || !IsReady() || !maxLength || maxLength > 4096) return false;
-    const size_t limit = (std::min)(maxLength, size_t(RamSize - (guest & RamMask)));
-    std::string value;
-    for (size_t i = 0; i < limit; ++i)
-    {
-        char ch{};
-        if (!ReadGuest(guest + static_cast<uint32_t>(i), ch)) return false;
-        if (!ch) { output = std::move(value); return true; }
-        value += ch;
-    }
-    // A bounded, unterminated string is not a valid guest string.
-    return false;
 }
 
 void SOCOM::Update()
@@ -619,12 +608,14 @@ void SOCOM::Update()
 			std::lock_guard<std::mutex> lock(this->m_cacheMutex);
 			this->m_cache = SGlobalSnapshot();
 		} // free lock
+
 		static std::string lastReason;
-        if (lastReason != reason)
-        {
-            printf("[!] SOCOM::Update - reset `%s`\n", reason);
-            lastReason = reason;
-        }
+		if (lastReason == reason)
+			return;
+
+        printf("[!] SOCOM::Update - reset `%s`\n", reason);
+
+        lastReason = reason;
 	};
 
 	SGlobalSnapshot globals;
@@ -636,18 +627,16 @@ void SOCOM::Update()
 		return reset("failed to obtain eemem");
 
 	//	GET LOCAL PLAYER
-	uint32_t pLocalPlayer{};
-	if (!g_Memory.ReadGuest(Offsets::gLocalSeal, pLocalPlayer) || !pLocalPlayer)
+	u32_t pLocalPlayer = g_Memory.Read<_int32>(globals.m_EE + Offsets::gLocalSeal);
+	if (!pLocalPlayer)
 		return reset("failed to obtain local player");
 
-	Classes::CZSealBody localSeal{};
-	if (!g_Memory.ReadGuest(pLocalPlayer, localSeal))
-		return reset("failed to read local player");
+	Classes::CZSealBody localSeal = g_Memory.Read<Classes::CZSealBody>(pLocalPlayer);
 
 	player.m_RVA = pLocalPlayer;
 	player.m_pos = localSeal.m_wsOrigin;
 	player.m_seal = localSeal;
-	if (!g_Memory.ReadGuestString(localSeal.p_name, player.m_name, 32))
+	if (!g_Memory.ReadString(globals.m_EE + localSeal.p_name, player.m_name, 32))
 		return reset("failed to read local player name");
 
 	//	GET PLAYERS
@@ -663,7 +652,7 @@ void SOCOM::Update()
 			if (ent.p_name == localSeal.p_name)
 				continue;	//	skip local player
 
-			if (!g_Memory.ReadGuestString(ent.p_name, imPlayer.m_name, 32))
+			if (!g_Memory.ReadString(globals.m_EE + ent.p_name, imPlayer.m_name, 32))
 				continue;
 
 			imPlayer.m_pos = ent.m_wsOrigin;

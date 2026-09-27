@@ -6,38 +6,27 @@
 #include <type_traits>
 
 using u32_t = uint32_t;
+constexpr i64_t RuntimeForCrashRva = 0x0D7FAD18; // 
 
 struct SOCOMPROCESSINFO : public PROCESSINFO64
 {
-    uintptr_t dwEEBase{0};
+    i64_t dwEEBase{0};
 };
 using SOCOMInfo_t = SOCOMPROCESSINFO;
 
 class SOCOMMemory : public exMemory
 {
 public:
-    static constexpr uint32_t RamSize = 0x02000000u;
-    static constexpr uint32_t RamMask = RamSize - 1;
+    static constexpr u32_t RamSize = 0x02000000u;
+    static constexpr u32_t RamMask = RamSize - 1;
     explicit SOCOMMemory(const std::string& name = "socom2.exe");
     SOCOMMemory(const std::string& name, const DWORD& access);
     bool Attach(const std::string& name, const DWORD& access = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) override;
     bool Detach() override;
     void update() override;
     const SOCOMInfo_t& GetSocomInfo() const { return SocomInfo; }
-    uintptr_t GetEEMemory() const { return SocomInfo.dwEEBase; }
-    bool IsReady() const { return bAttached && GetEEMemory() != 0; }
-    uintptr_t GuestToHost(uint32_t guest) const
-    { return IsReady() ? GetEEMemory() + (guest & RamMask) : 0; }
-    bool ReadGuestBytes(uint32_t guest, void* output, size_t size);
-    bool ReadGuestString(uint32_t guest, std::string& output, size_t maxLength = 260);
-    template<class T> bool ReadGuest(uint32_t guest, T& output)
-    {
-        static_assert(std::is_trivially_copyable<T>::value, "Guest data must be trivially copyable");
-        T value{};
-        if (!ReadGuestBytes(guest, &value, sizeof(value))) return false;
-        output = value;
-        return true;
-    }
+	i64_t GetEEMemory() const { return SocomInfo.dwEEBase; }
+
 private:
     bool ResolveRdram();
     SOCOMInfo_t SocomInfo{};
@@ -425,7 +414,7 @@ namespace Engine
 			{
 			public:
 				u32_t vfTable; //0x0000 : vft*
-				u32_t p_Name; //0x0004 : char*
+				u32_t p_name; //0x0004 : char*
 				u32_t p_DisplayName; //0x0008 : char*
 				u32_t p_TextureName; //0x000C : char*
 				char pad_0010[4]; //0x0010
