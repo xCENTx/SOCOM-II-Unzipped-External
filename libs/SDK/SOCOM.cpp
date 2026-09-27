@@ -436,6 +436,7 @@ namespace Engine
 	}
 }
 
+// test
 namespace
 {
     constexpr uintptr_t SignatureOffset = 0x00180000;
@@ -474,29 +475,36 @@ namespace
     }
 }
 
-SOCOMMemory::SOCOMMemory(const std::string& name)
-    : SOCOMMemory(name, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) {}
+SOCOMMemory::SOCOMMemory(const std::string& name) : SOCOMMemory(name, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) {}
 
-SOCOMMemory::SOCOMMemory(const std::string& name, const DWORD& access)
-    : exMemory(), targetName(name), targetAccess(access)
+SOCOMMemory::SOCOMMemory(const std::string& name, const DWORD& access) : exMemory(), targetName(name), targetAccess(access)
 {
-    // Attach during update(), after application initialization.
     bAttached = false;
 }
 
 bool SOCOMMemory::Attach(const std::string& name, const DWORD& access)
 {
     targetName = name;
-    targetAccess = access;
-    Detach();
-    procInfo_t process{};
-    if (!AttachEx(targetName, &process, access) || !process.hProc || process.hProc == INVALID_HANDLE_VALUE) return false;
-    vmProcess = process;
-    static_cast<PROCESSINFO64&>(SocomInfo) = process;
-    bAttached = true;
-    printf("[memory] Attached to %s (PID %lu)\n", targetName.c_str(), process.dwPID);
-    ResolveRdram();
-    return true; // Process attachment and RDRAM readiness are separate states.
+    
+	targetAccess = access;
+    
+	Detach();
+    
+	procInfo_t process{};
+    if (!AttachEx(targetName, &process, access) || !process.hProc || process.hProc == INVALID_HANDLE_VALUE) 
+		return false;
+    
+	vmProcess = process;
+    
+	static_cast<PROCESSINFO64&>(SocomInfo) = process;
+    
+	bAttached = true;
+    
+	printf("[memory] Attached to %s (PID %lu)\n", targetName.c_str(), process.dwPID);
+    
+	ResolveRdram();
+    
+	return true; // Process attachment and RDRAM readiness are separate states.
 }
 
 bool SOCOMMemory::Detach()
@@ -526,77 +534,112 @@ bool SOCOMMemory::ResolveRdram()
         {
             for (uintptr_t address = begin; address < end;)
             {
-                if (address != previousEnd) carry = 0;
-                const size_t amount = (std::min)(ChunkSize, static_cast<size_t>(end - address));
-                SIZE_T got = 0;
+                if (address != previousEnd) 
+					carry = 0;
+                
+				const size_t amount = (std::min)(ChunkSize, static_cast<size_t>(end - address));
+                
+				SIZE_T got = 0;
                 ReadProcessMemory(vmProcess.hProc, reinterpret_cast<void*>(address),
                     buffer.data() + carry, amount, &got);
+
                 const size_t total = carry + got;
-                if (got && total >= RdramSignature.size())
+                
+				if (got && total >= RdramSignature.size())
                 {
                     auto cursor = buffer.begin();
-                    const auto finish = buffer.begin() + total;
-                    while ((cursor = std::search(cursor, finish, RdramSignature.begin(), RdramSignature.end())) != finish)
+                    
+					const auto finish = buffer.begin() + total;
+                    
+					while ((cursor = std::search(cursor, finish, RdramSignature.begin(), RdramSignature.end())) != finish)
                     {
                         const uintptr_t match = address - carry + (cursor - buffer.begin());
-                        if (match >= SignatureOffset && RamRange(vmProcess.hProc, match - SignatureOffset))
+                        
+						if (match >= SignatureOffset && RamRange(vmProcess.hProc, match - SignatureOffset))
                             candidates.insert(match - SignatureOffset);
-                        ++cursor;
+                        
+						++cursor;
                     }
                 }
                 carry = (std::min)(total, RdramSignature.size() - 1);
-                if (carry) std::memmove(buffer.data(), buffer.data() + total - carry, carry);
-                previousEnd = address + got;
-                // Retry unread portions on the next page rather than skipping the whole chunk.
-                address += got ? got : (std::min)(amount, size_t(4096));
-                if (!got) carry = 0;
+                
+				if (carry) 
+					std::memmove(buffer.data(), buffer.data() + total - carry, carry);
+                
+				previousEnd = address + got;
+                
+				address += got ? got : (std::min)(amount, size_t(4096));
+                
+				if (!got) 
+					carry = 0;
             }
         }
-        else { carry = 0; previousEnd = 0; }
+        else 
+		{ 
+			carry = 0; 
+			previousEnd = 0; 
+		}
         region = end;
     }
-    if (candidates.size() != 1)
+    
+	if (candidates.size() != 1)
     {
         printf("[memory] RDRAM candidates: %zu; waiting for one unambiguous allocation\n", candidates.size());
         return false;
     }
-    SocomInfo.dwEEBase = *candidates.begin();
-    printf("[memory] EE base: 0x%llX; AOB: 0x%llX\n",
+    
+	SocomInfo.dwEEBase = *candidates.begin();
+    
+	printf("[memory] EE base: 0x%llX; AOB: 0x%llX\n",
         static_cast<unsigned long long>(GetEEMemory()),
-        static_cast<unsigned long long>(GetEEMemory() + SignatureOffset));
+        static_cast<unsigned long long>(GetEEMemory() + SignatureOffset)
+	);
+
     return true;
 }
 
 void SOCOMMemory::update()
 {
     const auto now = GetTickCount64();
-    if (lastRefresh && now - lastRefresh < 1000) return;
-    lastRefresh = now;
-    if (bAttached)
+    
+	if (lastRefresh && now - lastRefresh < 1000) 
+		return;
+    
+	lastRefresh = now;
+    
+	if (bAttached)
     {
         DWORD code = 0;
-        if (!GetExitCodeProcess(vmProcess.hProc, &code) || code != STILL_ACTIVE) Detach();
+        if (!GetExitCodeProcess(vmProcess.hProc, &code) || code != STILL_ACTIVE) 
+			Detach();
     }
-    if (!bAttached)
+    
+	if (!bAttached)
     {
         Attach(targetName, targetAccess);
         return;
     }
-    if (GetEEMemory())
+    
+	if (GetEEMemory())
     {
         std::array<unsigned char, RdramSignature.size()> bytes{};
         if (!ReadMemoryEx(vmProcess.hProc, GetEEMemory() + SignatureOffset, bytes.data(), bytes.size()) ||
             bytes != RdramSignature || !RamRange(vmProcess.hProc, GetEEMemory()))
             SocomInfo.dwEEBase = 0;
     }
-    if (!GetEEMemory()) ResolveRdram();
-    EnumWindowData data{};
-    data.procId = vmProcess.dwPID;
-    EnumWindows(GetProcWindowEx, reinterpret_cast<LPARAM>(&data));
-    // The callback stops enumeration on success, so do not test EnumWindows' return value.
-    SocomInfo.hWnd = vmProcess.hWnd = data.hwnd;
-    char title[MAX_PATH]{};
-    if (data.hwnd && GetWindowTextA(data.hwnd, title, MAX_PATH)) SocomInfo.mWndwTitle = title;
+
+    if (!GetEEMemory()) 
+		ResolveRdram();
+    
+	EnumWindowData data{};
+	data.procId = vmProcess.dwPID;
+	EnumWindows(GetProcWindowEx, reinterpret_cast<LPARAM>(&data));
+    
+	SocomInfo.hWnd = vmProcess.hWnd = data.hwnd;
+    
+	char title[MAX_PATH]{};
+    if (data.hwnd && GetWindowTextA(data.hwnd, title, MAX_PATH)) 
+		SocomInfo.mWndwTitle = title;
 }
 
 bool SOCOMMemory::ReadGuestBytes(uint32_t guest, void* output, size_t size)

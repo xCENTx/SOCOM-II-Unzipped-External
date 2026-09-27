@@ -6,7 +6,6 @@
 #include <type_traits>
 
 using u32_t = uint32_t;
-static_assert(sizeof(uintptr_t) == 8, "Build the external for x64");
 
 struct SOCOMPROCESSINFO : public PROCESSINFO64
 {
@@ -21,8 +20,7 @@ public:
     static constexpr uint32_t RamMask = RamSize - 1;
     explicit SOCOMMemory(const std::string& name = "socom2.exe");
     SOCOMMemory(const std::string& name, const DWORD& access);
-    bool Attach(const std::string& name,
-        const DWORD& access = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) override;
+    bool Attach(const std::string& name, const DWORD& access = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ) override;
     bool Detach() override;
     void update() override;
     const SOCOMInfo_t& GetSocomInfo() const { return SocomInfo; }
@@ -58,8 +56,7 @@ namespace Engine
 			constexpr auto gAppCamera{ 0x415FF0 };			//	
 			constexpr auto gLocalSeal{ 0x440C38 };			//	
 			constexpr auto gCamera{ 0x488DE8 };				//	
-			constexpr auto gEntityArray{ 0x4D46A0 };		//	
-			constexpr auto gPickups{ 0x51E970 };			//
+			constexpr auto gEntityArray{ 0x4362E0 };		//	
 		}
 
 		namespace Enums
@@ -79,7 +76,7 @@ namespace Engine
 				ETeam_TERRORIST = 0x80000100,		//	Terrorist
 				ETeam_TURRET	= 0x48000000,		//	Turret
 				ETeam_SPECTATOR = 0x00010000,		//	Spectator
-				ETeam_SP_ABLE	= 0x84000006,			//	Alpha Team
+				ETeam_SP_ABLE	= 0x84000006,		//	Alpha Team
 				ETeam_SP_BRAVO	= 0x8400000A,		//	Bravo Team
 			};
 
