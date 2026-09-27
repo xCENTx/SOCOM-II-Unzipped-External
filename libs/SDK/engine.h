@@ -90,6 +90,7 @@ namespace Engine
 
 		Vec4 MatrixMultiply(const Vec3& v) const;
 		Vec4 MatrixMultiply(const Vec4& v) const;
+		Vec3 TransformPoint3(const Vec3& v) const;
 		Vec4 TransformPoint(const Vec3& v) const;
 		Vec4 TransformPoint(const Vec4& v) const;
 	};
@@ -97,5 +98,46 @@ namespace Engine
 	struct AABB
 	{
 		Vec3 min, max;
+
+		void GetBoxVerts(Vec3 out[8]);
+		void GetRotatedBoxVerts(const Matrix4x4& mtx, Vec3 out[8]);
 	};
+
+	static inline Vec3 QuaternionRotate(Vec4 q, Vec3 v)
+	{
+		// q.xyz = imaginary component
+		// q.w   = real component
+
+		Vec3 qv =
+		{
+			q.x,
+			q.y,
+			q.z
+		};
+
+		Vec3 uv =
+		{
+			qv.y * v.z - qv.z * v.y,
+			qv.z * v.x - qv.x * v.z,
+			qv.x * v.y - qv.y * v.x
+		};
+
+		Vec3 uuv =
+		{
+			qv.y * uv.z - qv.z * uv.y,
+			qv.z * uv.x - qv.x * uv.z,
+			qv.x * uv.y - qv.y * uv.x
+		};
+
+		float s = 2.0f * q.w;
+
+		Vec3 out =
+		{
+			v.x + (uv.x * s) + (uuv.x * 2.0f),
+			v.y + (uv.y * s) + (uuv.y * 2.0f),
+			v.z + (uv.z * s) + (uuv.z * 2.0f)
+		};
+
+		return out;
+	}
 }

@@ -76,12 +76,6 @@ void Menu::MainMenu()
     if (this->bESP)
     {
         ImGui::SameLine();
-        ImGui::Checkbox("##render_players", &this->bESPPlayers);
-        GUI::Tooltip("PLAYERS");
-        ImGui::SameLine();
-        ImGui::Checkbox("##render_pickups", &this->bESPPickups);
-        GUI::Tooltip("PICKUPS");
-        ImGui::SameLine();
         ImGui::Checkbox("##names", &this->bESPName);
         GUI::Tooltip("NAMES");
         ImGui::SameLine();
@@ -91,11 +85,17 @@ void Menu::MainMenu()
         ImGui::Checkbox("##box_2D", &this->bESPBox2D);
         GUI::Tooltip("2D BOX");
         ImGui::SameLine();
+        ImGui::Checkbox("##bones", &this->bESPBones);
+        GUI::Tooltip("BONES");
+        ImGui::SameLine();
+        ImGui::Checkbox("##bounds", &this->bESPBounds);
+        GUI::Tooltip("BOUNDS");
+        ImGui::SameLine();
         ImGui::Checkbox("##box_health", &this->bESPHealth);
         GUI::Tooltip("HEALTH");
 
         ImGui::SameLine();
-        ImGui::SetCursorPosX(width * .5);
+        // ImGui::SetCursorPosX(width * .5);
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         ImGui::SliderFloat("##ESP_DISTANCE", &mESPDist, 0.0f, 100.f, "%.0f");
     }
@@ -229,7 +229,7 @@ void Menu::RenderCache()
 
             auto ent_origin = obj.m_pos;
             const auto distance = cache.m_camera.m_mtxModel.Translate().Distance(ent_origin);
-            const bool bIsProne = obj.m_stance == Engine::zdb::Enums::ESealStance_Prone;
+            const bool bIsProne = obj.m_stance == Engine::zdb::Enums::ESTANCE_PRONE;
             if (distance > this->mESPDist)
                 continue;
 
@@ -243,6 +243,12 @@ void Menu::RenderCache()
                 Engine::zdb::Tools::Transform::WorldToScreen(ent_headOrigin, cache.m_camera, szScreen, &screenHead) == false
                 )
                 continue;
+
+            if (this->bESPBounds)
+                GUI::DrawPlayerBounds(obj, cache.m_camera, IM_COL32_WHITE);
+            
+            if (this->bESPBones)
+                GUI::DrawPlayerSkeleton(obj, cache.m_camera, IM_COL32_WHITE);
 
             const ImVec2 pos = screen_pos + ImVec2(screen.x, screen.y);
             const ImVec2 head_pos = screen_pos + ImVec2(screenHead.x, screenHead.y);
@@ -410,4 +416,91 @@ void GUI::CleanCircle(const ImVec2& pos, const ImColor& color, const float& radi
     Circle(pos, ImColor(0.0f, 0.0f, 0.0f, color.Value.w), radius, thickness, segments);
     Circle(pos, ImColor(1.0f, 1.0f, 1.0f, color.Value.w), radius, thickness, segments);
     Circle(pos, color, radius, thickness, segments);
+}
+
+void GUI::DrawPlayerSkeleton(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color)
+{
+    ImVec2 screen_pos = g_dxWindow->GetCloneWindowPos();
+    ImVec2 screen_size = g_dxWindow->GetCloneWindowSize();
+    Engine::Vec2 szScreen = { screen_size.x , screen_size.y };
+    for (int limb = 0; limb < Engine::zdb::BONE_CHAIN_COUNT; limb++)
+    {
+        Engine::Vec2 previousScreen;
+        bool previousVisible = false;
+        bool havePrevious = false;
+
+        for (int i = 0; i < 6; i++)
+        {
+            int boneIndex = Engine::zdb::cs_BoneChains[limb][i];
+
+            if (boneIndex == BONE_INVALID)
+                break;
+
+            if (!player.m_bBoneValid[boneIndex])
+            {
+                havePrevious = false;
+                continue;
+            }
+
+            const Engine::Vec3& world = player.m_bones[boneIndex];
+
+            Engine::Vec2 screen;
+            bool visible = Engine::zdb::Tools::Transform::WorldToScreen(
+                    world,
+                    camera,
+                    szScreen,
+                    &screen
+                );
+
+            if (havePrevious && previousVisible && visible)
+            {
+                CleanLine(
+                    ImVec2(previousScreen.x, previousScreen.y) + screen_pos,
+                    ImVec2(screen.x, screen.y) + screen_pos,
+                    color
+                );
+            }
+
+            previousScreen = screen;
+            previousVisible = visible;
+            havePrevious = true;
+        }
+    }
+}
+
+void GUI::DrawPlayerBounds(const SOCOM::SImGuiPlayer& player, Engine::zdb::Classes::CZCamera camera, const ImColor& color)
+{
+    bool visible[8]{};
+    Engine::Vec2 screen[8];
+    ImVec2 screen_pos = g_dxWindow->GetCloneWindowPos();
+    ImVec2 screen_size = g_dxWindow->GetCloneWindowSize();
+    Engine::Vec2 szScreen = { screen_size.x , screen_size.y };
+
+    for (int i = 0; i < 8; i++)
+    {
+        if (!player.m_boundsValid[i])
+            continue;
+
+        visible[i] = Engine::zdb::Tools::Transform::WorldToScreen(
+                player.m_bounds[i],
+                camera,
+                szScreen,
+                &screen[i]
+            );
+    }
+
+    for (int i = 0; i < 12; i++)
+    {
+        int a = Engine::zdb::cs_BoxVerts[i][0];
+        int b = Engine::zdb::cs_BoxVerts[i][1];
+
+        if (visible[a] && visible[b])
+        {
+            CleanLine(
+                ImVec2(screen[a].x, screen[a].y) + screen_pos,
+                ImVec2(screen[b].x, screen[b].y) + screen_pos,
+                color
+            );
+        }
+    }
 }
