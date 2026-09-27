@@ -101,10 +101,14 @@ namespace Engine
 					return false;
 
 
+				int i = 0;
 				auto it = g_Memory.Read<Structs::ZIterator>(eemem + sealArray.begin);
 				auto end = g_Memory.Read<Structs::ZIterator>(eemem + it.prev);
 				do
 				{
+					if (i > sealArray.count)
+						break;
+
 					auto data = it.data;
 					if (data > 0)
 					{
@@ -114,7 +118,8 @@ namespace Engine
 					}
 
 					it = g_Memory.Read<Structs::ZIterator>(eemem + it.next);
-
+					
+					i++;
 				} while (it.data != end.data);
 
 				*players = seals;
@@ -535,14 +540,23 @@ bool SOCOMMemory::ResolveRdram()
 	i64_t runtime = 0;
     const i64_t prev = SocomInfo.dwEEBase;
 	const i64_t slot = vmProcess.dwModuleBase + RuntimeForCrashRva;
-    if (!bAttached) 
+	if (!bAttached)
+	{
+		SocomInfo.dwEEBase = 0;
 		return false;
+	}
 
 	if (!ReadMemoryEx(vmProcess.hProc, slot, &runtime, sizeof(runtime)) || !runtime)
+	{
+		SocomInfo.dwEEBase = 0;
 		return false;
+	}
 
 	if (!ReadMemoryEx(vmProcess.hProc, runtime, &rdram, sizeof(rdram)) || !rdram)
+	{
+		SocomInfo.dwEEBase = 0;
 		return false;
+	}
 
 	if (prev == rdram)
 		return false;
@@ -631,12 +645,12 @@ void SOCOM::Update()
 	if (!pLocalPlayer)
 		return reset("failed to obtain local player");
 
-	Classes::CZSealBody localSeal = g_Memory.Read<Classes::CZSealBody>(pLocalPlayer);
+	Classes::CZSealBody localSeal = g_Memory.Read<Classes::CZSealBody>(globals.m_EE + pLocalPlayer);
 
 	player.m_RVA = pLocalPlayer;
 	player.m_pos = localSeal.m_wsOrigin;
 	player.m_seal = localSeal;
-	if (!g_Memory.ReadString(globals.m_EE + localSeal.p_name, player.m_name, 32))
+	if (!g_Memory.ReadString(globals.m_EE + localSeal.p_name, player.m_name, PLAYNAME_MAXLEN))
 		return reset("failed to read local player name");
 
 	//	GET PLAYERS
@@ -652,7 +666,7 @@ void SOCOM::Update()
 			if (ent.p_name == localSeal.p_name)
 				continue;	//	skip local player
 
-			if (!g_Memory.ReadString(globals.m_EE + ent.p_name, imPlayer.m_name, 32))
+			if (!g_Memory.ReadString(globals.m_EE + ent.p_name, imPlayer.m_name, PLAYNAME_MAXLEN))
 				continue;
 
 			imPlayer.m_pos = ent.m_wsOrigin;
@@ -682,7 +696,5 @@ void SOCOM::Update()
 
 void SOCOM::ShutDown()
 {
-	// disable any enabled patches
-
 	g_Memory.Detach();
 }

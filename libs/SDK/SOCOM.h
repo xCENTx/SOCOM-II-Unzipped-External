@@ -7,6 +7,7 @@
 
 using u32_t = uint32_t;
 constexpr i64_t RuntimeForCrashRva = 0x0D7FAD18; // 
+#define PLAYNAME_MAXLEN 32
 
 struct SOCOMPROCESSINFO : public PROCESSINFO64
 {
