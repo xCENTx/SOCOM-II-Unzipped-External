@@ -436,14 +436,12 @@ namespace Engine
 	}
 }
 
-// test
+// Native SOCOM II runtime memory discovery.
 namespace
 {
-    constexpr uintptr_t SignatureOffset = 0x00180000;
-    constexpr std::array<unsigned char, 24> RdramSignature = {
-        0x28,0x0C,0x00,0x70, 0x28,0x14,0x00,0x70, 0x28,0x1C,0x00,0x70,
-        0x28,0x24,0x00,0x70, 0x28,0x2C,0x00,0x70, 0x28,0x34,0x00,0x70
-    };
+    // Verified for the September 26, 2026 socom2.exe build. This is an RVA,
+    // not an absolute address; update it when the native executable changes.
+    constexpr uintptr_t RuntimeForCrashRva = 0x0D7FAD18;
 
     bool Readable(const MEMORY_BASIC_INFORMATION& info)
     {
@@ -517,84 +515,37 @@ bool SOCOMMemory::Detach()
 
 bool SOCOMMemory::ResolveRdram()
 {
+    const uintptr_t previousBase = SocomInfo.dwEEBase;
     SocomInfo.dwEEBase = 0;
-    constexpr size_t ChunkSize = 1024 * 1024;
-    std::vector<unsigned char> buffer(ChunkSize + RdramSignature.size() - 1);
-    std::unordered_set<uintptr_t> candidates;
-    size_t carry = 0;
-    uintptr_t previousEnd = 0;
-    MEMORY_BASIC_INFORMATION info{};
-    for (uintptr_t region = 0; VirtualQueryEx(vmProcess.hProc,
-        reinterpret_cast<void*>(region), &info, sizeof(info));)
-    {
-        const uintptr_t begin = reinterpret_cast<uintptr_t>(info.BaseAddress);
-        const uintptr_t end = begin + info.RegionSize;
-        if (end <= region) break;
-        if (Readable(info) && info.Type == MEM_PRIVATE)
-        {
-            for (uintptr_t address = begin; address < end;)
-            {
-                if (address != previousEnd) 
-					carry = 0;
-                
-				const size_t amount = (std::min)(ChunkSize, static_cast<size_t>(end - address));
-                
-				SIZE_T got = 0;
-                ReadProcessMemory(vmProcess.hProc, reinterpret_cast<void*>(address),
-                    buffer.data() + carry, amount, &got);
+    if (!bAttached || sizeof(uintptr_t) != sizeof(uint64_t)) return false;
 
-                const size_t total = carry + got;
-                
-				if (got && total >= RdramSignature.size())
-                {
-                    auto cursor = buffer.begin();
-                    
-					const auto finish = buffer.begin() + total;
-                    
-					while ((cursor = std::search(cursor, finish, RdramSignature.begin(), RdramSignature.end())) != finish)
-                    {
-                        const uintptr_t match = address - carry + (cursor - buffer.begin());
-                        
-						if (match >= SignatureOffset && RamRange(vmProcess.hProc, match - SignatureOffset))
-                            candidates.insert(match - SignatureOffset);
-                        
-						++cursor;
-                    }
-                }
-                carry = (std::min)(total, RdramSignature.size() - 1);
-                
-				if (carry) 
-					std::memmove(buffer.data(), buffer.data() + total - carry, carry);
-                
-				previousEnd = address + got;
-                
-				address += got ? got : (std::min)(amount, size_t(4096));
-                
-				if (!got) 
-					carry = 0;
-            }
-        }
-        else 
-		{ 
-			carry = 0; 
-			previousEnd = 0; 
-		}
-        region = end;
-    }
-    
-	if (candidates.size() != 1)
-    {
-        printf("[memory] RDRAM candidates: %zu; waiting for one unambiguous allocation\n", candidates.size());
-        return false;
-    }
-    
-	SocomInfo.dwEEBase = *candidates.begin();
-    
-	printf("[memory] EE base: 0x%llX; AOB: 0x%llX\n",
-        static_cast<unsigned long long>(GetEEMemory()),
-        static_cast<unsigned long long>(GetEEMemory() + SignatureOffset)
-	);
+    const uintptr_t module = static_cast<uintptr_t>(vmProcess.dwModuleBase);
+    if (!module || module > UINTPTR_MAX - RuntimeForCrashRva - sizeof(uint64_t)) return false;
+    const uintptr_t slot = module + RuntimeForCrashRva;
 
+    // g_runtimeForCrash -> PS2Runtime::m_memory (offset 0) -> m_rdram (offset 0).
+    // Host pointers are QWORDs even though guest pointers remain 32-bit.
+    uint64_t runtime = 0;
+    uint64_t rdram = 0;
+    if (!ReadMemoryEx(vmProcess.hProc, slot, &runtime, sizeof(runtime)) ||
+        !runtime || runtime > UINTPTR_MAX - sizeof(uint64_t) ||
+        !ReadMemoryEx(vmProcess.hProc, static_cast<uintptr_t>(runtime), &rdram, sizeof(rdram)) ||
+        !rdram || rdram > UINTPTR_MAX - RamSize ||
+        !RamRange(vmProcess.hProc, static_cast<uintptr_t>(rdram))) return false;
+
+    // Do not publish a chain that changed while the allocation was validated.
+    uint64_t currentRuntime = 0;
+    uint64_t currentRdram = 0;
+    if (!ReadMemoryEx(vmProcess.hProc, slot, &currentRuntime, sizeof(currentRuntime)) ||
+        currentRuntime != runtime ||
+        !ReadMemoryEx(vmProcess.hProc, static_cast<uintptr_t>(runtime), &currentRdram, sizeof(currentRdram)) ||
+        currentRdram != rdram) return false;
+
+    SocomInfo.dwEEBase = static_cast<uintptr_t>(rdram);
+    if (SocomInfo.dwEEBase != previousBase)
+        printf("[memory] Runtime: 0x%llX; EE base: 0x%llX\n",
+            static_cast<unsigned long long>(runtime),
+            static_cast<unsigned long long>(rdram));
     return true;
 }
 
@@ -620,16 +571,8 @@ void SOCOMMemory::update()
         return;
     }
     
-	if (GetEEMemory())
-    {
-        std::array<unsigned char, RdramSignature.size()> bytes{};
-        if (!ReadMemoryEx(vmProcess.hProc, GetEEMemory() + SignatureOffset, bytes.data(), bytes.size()) ||
-            bytes != RdramSignature || !RamRange(vmProcess.hProc, GetEEMemory()))
-            SocomInfo.dwEEBase = 0;
-    }
-
-    if (!GetEEMemory()) 
-		ResolveRdram();
+    // Follow the live chain every refresh, including while waiting for startup.
+    ResolveRdram();
     
 	EnumWindowData data{};
 	data.procId = vmProcess.dwPID;
